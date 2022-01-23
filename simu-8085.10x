@@ -1,0 +1,29 @@
+<?xml version="1.0"?>
+<N10X>
+	<Workspace>
+		<FileTypes>All Code Files</FileTypes>
+		<ExcludeFilters></ExcludeFilters>
+		<SyncFiles>true</SyncFiles>
+		<Recursive>true</Recursive>
+		<IsVirtual>false</IsVirtual>
+		<IsFolder>false</IsFolder>
+		<BuildCommand>pwsh $(WorkspaceDirectory)\build.ps1</BuildCommand>
+		<RebuildCommand></RebuildCommand>
+		<BuildFileCommand>$(WorkspaceDirectory)\build.ps1</BuildFileCommand>
+		<CleanCommand></CleanCommand>
+		<RunCommand>$(WorkspaceDirectory)\build\simu-8085.exe</RunCommand>
+		<DebugCommand>devenv $(WorkspaceDirectory)\build\simu-8085.exe</DebugCommand>
+		<ExePathCommand></ExePathCommand>
+		<Configurations>
+			<Configuration>Debug</Configuration>
+			<Configuration>Release</Configuration>
+		</Configurations>
+		<Platforms>
+			<Platform>x64</Platform>
+			<Platform>Win32</Platform>
+		</Platforms>
+		<AdditionalIncludePaths></AdditionalIncludePaths>
+		<ConfigProperties></ConfigProperties>
+		<Children></Children>
+	</Workspace>
+</N10X>
