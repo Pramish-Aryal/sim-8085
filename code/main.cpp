@@ -16,6 +16,7 @@ enum Registers {
 	REG_L,
 	REG_H,
 	REG_COUNT,
+	REG_M,
 };
 
 enum Flags: uint8_t {
@@ -104,7 +105,6 @@ enum Instruction_Set {
 	MOV_M_E = 0x73,
 	MOV_M_H = 0x74,
 	MOV_M_L = 0x75,
-	MOV_M_M = 0x76,
 
 	MVI_A = 0x3E,
 	MVI_B = 0x06,
@@ -217,10 +217,10 @@ enum Instruction_Set {
 	200BH	 	JC NEXTBYTE	If accumulator is less then jump to NEXTBYTE
 	200EH	 	JZ NEXTBYTE	If accumulator is equal then jump to NEXTBYTE
 	2011H	 	MOV B, M	Swap the two elements
-	2012H	 	MOV M, A	 
-	2013H	 	DCX H	 
-	2014H	 	MOV M, B	 
-	2015H	 	INX H	 
+	2012H	 	MOV M, A
+	2013H	 	DCX H
+	2014H	 	MOV M, B
+	2015H	 	INX H
 	2016H	 	MVI D, 01H	If exchange occurs save 01 in D registers
 	2018H		NEXTBYTE	DCR C	Decrement C for next iteration
 	2019H	 	JNZ CHECK	Jump to CHECK if C>0
@@ -228,8 +228,8 @@ enum Instruction_Set {
 	201DH	 	CPI 01H	Compare accumulator contents with 01H
 	201FH	 	JZ START	Jump to START if D=01H
 	2022H	 	HLT	HALT
-	* 
-	* 
+	*
+	*
 
 START:	LXI H, 2040H	;Load size of array
 MVI D, 00H	;Clear D registers to set up a flag
@@ -242,10 +242,10 @@ CMP M	;Compare Accumulator with next element
 JC NEXTBYTE	;If accumulator is less then jump to NEXTBYTE
 JZ NEXTBYTE	;If accumulator is equal then jump to NEXTBYTE
 MOV B, M	;Swap the two elements
-MOV M, A	 
-DCX H	 
-MOV M, B	 
-INX H	 
+MOV M, A
+DCX H
+MOV M, B
+INX H
 MVI D, 01H	;If exchange occurs save 01 in D registers
 NEXTBYTE:	DCR C	;Decrement C for next iteration
 JNZ CHECK	;Jump to CHECK if C>0
@@ -253,11 +253,23 @@ MOV A, D	;Transfer contents of D to Accumulator
 CPI 01H	;Compare accumulator contents with 01H
 JZ START	;Jump to START if D=01H
 HLT	;HALT
-* 
-* 
-* 
-* 
+*
+*
+*
+*
 */
+
+#define BC_PAIR ((uint16_t)registers[REG_B] << 8 | (uint16_t)registers[REG_C])
+#define DE_PAIR ((uint16_t)registers[REG_D] << 8 | (uint16_t)registers[REG_E])
+#define HL_PAIR ((uint16_t)registers[REG_H] << 8 | (uint16_t)registers[REG_L])
+
+void mov(int dst, int src) {
+    if (src == dst) return;
+    uint8_t src_val;
+    src_val = (src == REG_M) ? g_memory[HL_PAIR] : registers[src];
+    (dst == REG_M) ? g_memory[HL_PAIR] = src_val : registers[dst] = src_val;
+}
+
 int main()
 {
 	uint8_t* ip = g_memory + 0x2000;
@@ -269,40 +281,40 @@ int main()
 	//MVI D, 00H
 	*ip++ = MVI_D;
 	*ip++ = 0x00;
-	//MOV C, M	
+	//MOV C, M
 	*ip++ = MOV_C_M;
-	//DCR C	
+	//DCR C
 	*ip++ = DCR_C;
-	//INX H	
+	//INX H
 	*ip++ = INX_H;
 	//CHECK:	MOV A, M
 	*ip++ = MOV_A_M;
-	//INX H	
+	//INX H
 	*ip++ = INX_H;
-	//CMP M	
+	//CMP M
 	*ip++ = CMP_M;
 	//JC NEXTBYTE
 	*ip++ = JC;
 	*ip++ = 0x18;
 	*ip++ = 0x20;
-	//JZ NEXTBYTE	
+	//JZ NEXTBYTE
 	*ip++ = JZ;
 	*ip++ = 0x18;
 	*ip++ = 0x20;
-	//MOV B, M	
+	//MOV B, M
 	*ip++ = MOV_B_M;
-	//MOV M, A	
+	//MOV M, A
 	*ip++ = MOV_M_A;
-	//DCX H	 
+	//DCX H
 	*ip++ = DCX_H;
 	//MOV M, B
 	*ip++ = MOV_M_B;
-	//INX H	
+	//INX H
 	*ip++ = INX_H;
 	//MVI D, 01H
 	*ip++ = MVI_D;
 	*ip++ = 0x01;
-	//NEXTBYTE:	DCR C	
+	//NEXTBYTE:	DCR C
 	*ip++ = DCR_C;
 	//JNZ CHECK
 	*ip++ = JNZ;
@@ -310,7 +322,7 @@ int main()
 	*ip++ = 0x20;
 	//MOV A, D
 	*ip++ = MOV_A_D;
-	//CPI 01H	
+	//CPI 01H
 	*ip++ = CPI;
 	*ip++ = 0x01;
 	//JZ START
@@ -339,38 +351,258 @@ int main()
 				++PC;
 				break;
 
-			case MOV_C_M: {
-				uint16_t reg_m = (uint16_t)registers[REG_H] << 8 | (uint16_t)registers[REG_L];
-				registers[REG_C] = g_memory[reg_m];
-				PC++;
-			} break;
-
+			case MOV_A_A:
+				++PC;
+				break;
+			case MOV_A_B:
+				mov(REG_A, REG_B);
+				++PC;
+				break;
+			case MOV_A_C:
+				mov(REG_A, REG_C);
+				++PC;
+				break;
 			case MOV_A_D:
-				registers[REG_A] = registers[REG_D];
+				mov(REG_A, REG_D);
+				++PC;
+				break;
+			case MOV_A_E:
+				mov(REG_A, REG_E);
+				++PC;
+				break;
+			case MOV_A_H:
+				mov(REG_A, REG_H);
+				++PC;
+				break;
+			case MOV_A_L:
+				mov(REG_A, REG_L);
+				++PC;
+				break;
+			case MOV_A_M:
+				mov(REG_A, REG_M);
 				++PC;
 				break;
 
-			case MOV_B_M: {
-				uint16_t reg_m = (uint16_t)registers[REG_H] << 8 | (uint16_t)registers[REG_L];
-				registers[REG_B] = g_memory[reg_m];
-				PC++;
-			} break;
+			case MOV_B_A:
+				mov(REG_B, REG_A);
+				++PC;
+				break;
+			case MOV_B_B:
+				++PC;
+				break;
+			case MOV_B_C:
+				mov(REG_B, REG_C);
+				++PC;
+				break;
+			case MOV_B_D:
+				mov(REG_B, REG_D);
+				++PC;
+				break;
+			case MOV_B_E:
+				mov(REG_B, REG_E);
+				++PC;
+				break;
+			case MOV_B_H:
+				mov(REG_B, REG_H);
+				++PC;
+				break;
+			case MOV_B_L:
+				mov(REG_B, REG_L);
+				++PC;
+				break;
+			case MOV_B_M:
+				mov(REG_B, REG_M);
+				++PC;
+				break;
 
-			case MOV_M_B: {
-				uint16_t reg_m = (uint16_t)registers[REG_H] << 8 | (uint16_t)registers[REG_L];
-				if (reg_m == 0x2003)
-					__debugbreak();
-				g_memory[reg_m] = registers[REG_B];
-				PC++;
-			} break;
+			case MOV_C_A:
+				mov(REG_C, REG_A);
+				++PC;
+				break;
+			case MOV_C_B:
+				mov(REG_C, REG_B);
+				++PC;
+				break;
+			case MOV_C_C:
+				++PC;
+				break;
+			case MOV_C_D:
+				mov(REG_C, REG_D);
+				++PC;
+				break;
+			case MOV_C_E:
+				mov(REG_C, REG_E);
+				++PC;
+				break;
+			case MOV_C_H:
+				mov(REG_C, REG_H);
+				++PC;
+				break;
+			case MOV_C_L:
+				mov(REG_C, REG_L);
+				++PC;
+				break;
+			case MOV_C_M:
+				mov(REG_C, REG_M);
+				++PC;
+				break;
 
-			case MOV_M_A: {
-				uint16_t reg_m = (uint16_t)registers[REG_H] << 8 | (uint16_t)registers[REG_L];
-				if (reg_m == 0x2003)
-					__debugbreak();
-				g_memory[reg_m] = registers[REG_A];
-				PC++;
-			} break;
+			case MOV_D_A:
+				mov(REG_D, REG_A);
+				++PC;
+				break;
+			case MOV_D_B:
+				mov(REG_D, REG_B);
+				++PC;
+				break;
+			case MOV_D_C:
+				mov(REG_D, REG_C);
+				++PC;
+				break;
+			case MOV_D_D:
+				++PC;
+				break;
+			case MOV_D_E:
+				mov(REG_D, REG_E);
+				++PC;
+				break;
+			case MOV_D_H:
+				mov(REG_D, REG_H);
+				++PC;
+				break;
+			case MOV_D_L:
+				mov(REG_D, REG_L);
+				++PC;
+				break;
+			case MOV_D_M:
+				mov(REG_D, REG_M);
+				++PC;
+				break;
+
+			case MOV_E_A:
+				mov(REG_E, REG_A);
+				++PC;
+				break;
+			case MOV_E_B:
+				mov(REG_E, REG_B);
+				++PC;
+				break;
+			case MOV_E_C:
+				mov(REG_E, REG_C);
+				++PC;
+				break;
+			case MOV_E_D:
+				mov(REG_E, REG_D);
+				++PC;
+				break;
+			case MOV_E_E:
+				++PC;
+				break;
+			case MOV_E_H:
+				mov(REG_E, REG_H);
+				++PC;
+				break;
+			case MOV_E_L:
+				mov(REG_E, REG_L);
+				++PC;
+				break;
+			case MOV_E_M:
+				mov(REG_E, REG_M);
+				++PC;
+				break;
+
+			case MOV_H_A:
+				mov(REG_H, REG_A);
+				++PC;
+				break;
+			case MOV_H_B:
+				mov(REG_H, REG_B);
+				++PC;
+				break;
+			case MOV_H_C:
+				mov(REG_H, REG_C);
+				++PC;
+				break;
+			case MOV_H_D:
+				mov(REG_H, REG_D);
+				++PC;
+				break;
+			case MOV_H_E:
+				mov(REG_H, REG_E);
+				++PC;
+				break;
+			case MOV_H_H:
+				++PC;
+				break;
+			case MOV_H_L:
+				mov(REG_H, REG_L);
+				++PC;
+				break;
+			case MOV_H_M:
+				mov(REG_H, REG_M);
+				++PC;
+				break;
+
+			case MOV_L_A:
+				mov(REG_L, REG_A);
+				++PC;
+				break;
+			case MOV_L_B:
+				mov(REG_L, REG_B);
+				++PC;
+				break;
+			case MOV_L_C:
+				mov(REG_L, REG_C);
+				++PC;
+				break;
+			case MOV_L_D:
+				mov(REG_L, REG_D);
+				++PC;
+				break;
+			case MOV_L_E:
+				mov(REG_L, REG_E);
+				++PC;
+				break;
+			case MOV_L_H:
+				mov(REG_L, REG_H);
+				++PC;
+				break;
+			case MOV_L_L:
+				++PC;
+				break;
+			case MOV_L_M:
+				mov(REG_L, REG_M);
+				++PC;
+				break;
+
+			case MOV_M_A:
+				mov(REG_M, REG_A);
+				++PC;
+				break;
+			case MOV_M_B:
+				mov(REG_M, REG_B);
+				++PC;
+				break;
+			case MOV_M_C:
+				mov(REG_M, REG_C);
+				++PC;
+				break;
+			case MOV_M_D:
+				mov(REG_M, REG_D);
+				++PC;
+				break;
+			case MOV_M_E:
+				mov(REG_M, REG_E);
+				++PC;
+				break;
+			case MOV_M_H:
+				mov(REG_M, REG_H);
+				++PC;
+				break;
+			case MOV_M_L:
+				mov(REG_M, REG_L);
+				++PC;
+				break;
 
 			case DCR_C:
 				registers[REG_C]--;
@@ -391,13 +623,6 @@ int main()
 					__debugbreak();
 				PC++;
 				break;
-
-
-			case MOV_A_M: {
-				uint16_t reg_m = (uint16_t)registers[REG_H] << 8 | (uint16_t)registers[REG_L];
-				registers[REG_A] = g_memory[reg_m];
-				PC++;
-			} break;
 
 			case CMP_M: {
 				//A - B
