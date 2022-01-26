@@ -243,6 +243,8 @@ int main()
 	ip = g_memory + 0x2000;
 	uint16_t PC = 0x2000;
 	uint16_t SP = 0xFFFF;
+	uint8_t TMP = 0x00;
+	uint16_t addr = 0;
 
 	g_memory[0x2040] = 5;
 	uint8_t numbers[] = { 9, 3, 2, 4, 1 };
@@ -250,6 +252,45 @@ int main()
 	int iter = 0;
 	for (bool running = true; running; iter++) {
 		switch (g_memory[PC]) {
+			case LDAX_B:
+				registers[REG_A] = g_memory[BC_PAIR];
+				++PC; break;
+			case LDAX_D:
+				registers[REG_A] = g_memory[DE_PAIR];
+				++PC; break;
+			case STAX_B:
+				g_memory[BC_PAIR] = registers[REG_A];
+				++PC; break;
+			case STAX_D:
+				g_memory[DE_PAIR] = registers[REG_A];
+				++PC; break;
+			case LHLD:
+				addr = (g_memory[PC + 1] & 0xFF) | ((g_memory[PC + 2] & 0xFF) << 8);
+				registers[REG_L] = g_memory[addr];
+				registers[REG_H] = g_memory[addr + 1];
+				PC += 3; break;
+			case SHLD:
+				addr = (g_memory[PC + 1] & 0xFF) | ((g_memory[PC + 2] & 0xFF) << 8);
+				g_memory[addr]	 = registers[REG_L];
+				g_memory[addr + 1] = registers[REG_H];
+				PC += 3; break;
+				break;
+			case LDA:
+				addr = (g_memory[PC + 1] & 0xFF) | ((g_memory[PC + 2] & 0xFF) << 8);
+				registers[REG_A] = g_memory[addr];
+				PC += 3; break;
+			case STA:
+				addr = (g_memory[PC + 1] & 0xFF) | ((g_memory[PC + 2] & 0xFF) << 8);
+				g_memory[addr] = registers[REG_A];
+				PC += 3; break;
+			case XCHG:
+				TMP			  = registers[REG_L];
+				registers[REG_L] = registers[REG_E];
+				registers[REG_E] = TMP;
+				TMP			  = registers[REG_H];
+				registers[REG_H] = registers[REG_D];
+				registers[REG_D] = TMP;
+				++PC; break;
 			case LXI_B :
 				registers[REG_C] = g_memory[++PC];
 				registers[REG_B] = g_memory[++PC];
