@@ -3,8 +3,29 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+#include <errno.h>
 
-#define panic(str) assert(0);
+#define panic(str) assert(0)
+
+#define SET_BIT(flag, b) ((flag) |= (b))
+#define RESET_BIT(flag, b) ((flag) &= ~(b))
+#define TOGGLE_BIT(flag, b) ((flag) ^= (b))
+
+#define Minimum(a, b) (((a) < (b)) ? (a) : (b))
+#define Maximum(a, b) (((a) > (b)) ? (a) : (b))
+#define Clamp(a, b, v) Minimum(b, Maximum(a, v))
+
+struct String {
+	int64_t length;
+	uint8_t* data;
+
+	String() : data(0), length(0) {}
+	template <int64_t _length>
+	constexpr String(const char(&a)[_length]) : data((uint8_t*)a), length(_length - 1) {}
+	String(const uint8_t* _data, int64_t _length) : data((uint8_t*)_data), length(_length) {}
+	const uint8_t& operator[](const int64_t index) const { assert(index < length); return data[index]; }
+	uint8_t& operator[](const int64_t index) { assert(index < length); return data[index]; }
+};
 
 enum Registers {
 	REG_A = 0,
@@ -19,21 +40,21 @@ enum Registers {
 	REG_M,
 };
 
-enum Flags: uint8_t {
+enum Flags : uint8_t {
 	FLAG_NONE = 0,
-	FLAG_S  = 1 << 7,
-	FLAG_Z  = 1 << 6,
+	FLAG_S = 1 << 7,
+	FLAG_Z = 1 << 6,
 	FLAG_AC = 1 << 4,
-	FLAG_P  = 1 << 3,
+	FLAG_P = 1 << 3,
 	FLAG_CY = 1,
 };
 
 static uint8_t g_memory[64 * 1024];
 static uint8_t registers[REG_COUNT] = {};
-static uint8_t& flags = registers[REG_F];
+
 
 enum Instruction_Set {
-	/*======  Data Transfer Group ======*/
+	/*======  data Transfer Group ======*/
 	MOV_A_A = 0x7F, MOV_B_A = 0x47, MOV_C_A = 0x4F, MOV_D_A = 0x57, MOV_E_A = 0x5F,
 	MOV_A_B = 0x78, MOV_B_B = 0x40, MOV_C_B = 0x48, MOV_D_B = 0x50, MOV_E_B = 0x58,
 	MOV_A_C = 0x79, MOV_B_C = 0x41, MOV_C_C = 0x49, MOV_D_C = 0x51, MOV_E_C = 0x59,
@@ -50,12 +71,12 @@ enum Instruction_Set {
 	MOV_H_E = 0x63, MOV_L_E = 0x6B, MOV_M_E = 0x73, MVI_E = 0x1E,
 	MOV_H_H = 0x64, MOV_L_H = 0x6C, MOV_M_H = 0x74, MVI_H = 0x26,
 	MOV_H_L = 0x65, MOV_L_L = 0x6D, MOV_M_L = 0x75, MVI_L = 0x2E,
-	MOV_H_M = 0x66, MOV_L_M = 0x6E, XCHG    = 0xEB, MVI_M = 0x36,
+	MOV_H_M = 0x66, MOV_L_M = 0x6E, XCHG = 0xEB, MVI_M = 0x36,
 
-	LXI_B  = 0x01, LDAX_B = 0x0A, STAX_B = 0x02,
-	LXI_D  = 0x11, LDAX_D = 0x1A, STAX_D = 0x12,
-	LXI_H  = 0x21, LHLD   = 0x2A, SHLD   = 0x22,
-	LXI_SP = 0x31, LDA    = 0x3A, STA    = 0x32,
+	LXI_B = 0x01, LDAX_B = 0x0A, STAX_B = 0x02,
+	LXI_D = 0x11, LDAX_D = 0x1A, STAX_D = 0x12,
+	LXI_H = 0x21, LHLD = 0x2A, SHLD = 0x22,
+	LXI_SP = 0x31, LDA = 0x3A, STA = 0x32,
 
 	/*======  Arithmetic and Logic Group ======*/
 	ADD_A = 0x87, ADC_A = 0x8F, SUB_A = 0x97, SBB_A = 0x9F, INR_A = 0x3C, DCR_A = 0x3D,
@@ -67,9 +88,9 @@ enum Instruction_Set {
 	ADD_L = 0x85, ADC_L = 0x8D, SUB_L = 0x95, SBB_L = 0x9D, INR_L = 0x2C, DCR_L = 0x2D,
 	ADD_M = 0x86, ADC_M = 0x8E, SUB_M = 0x96, SBB_M = 0x9E, INR_M = 0x34, DCR_M = 0x35,
 
-	INX_B  = 0x03, DCX_B  = 0x0B, DAD_B  = 0x09, DAA = 0x27, RLC = 0x07,
-	INX_D  = 0x13, DCX_D  = 0x1B, DAD_D  = 0x19, CMA = 0x2F, RRC = 0x0F,
-	INX_H  = 0x23, DCX_H  = 0x2B, DAD_H  = 0x29, STC = 0x37, RAL = 0x17,
+	INX_B = 0x03, DCX_B = 0x0B, DAD_B = 0x09, DAA = 0x27, RLC = 0x07,
+	INX_D = 0x13, DCX_D = 0x1B, DAD_D = 0x19, CMA = 0x2F, RRC = 0x0F,
+	INX_H = 0x23, DCX_H = 0x2B, DAD_H = 0x29, STC = 0x37, RAL = 0x17,
 	INX_SP = 0x33, DCX_SP = 0x3B, DAD_SP = 0x39, CMC = 0x3F, RAR = 0x1F,
 
 	ANA_A = 0xA7, XRA_A = 0xAF, ORA_A = 0xB7, CMP_A = 0xBF, ADI = 0xC6,
@@ -82,32 +103,32 @@ enum Instruction_Set {
 	ANA_M = 0xA6, XRA_M = 0xAE, ORA_M = 0xB6, CMP_M = 0xBE, CPI = 0xFE,
 
 	/*====== Branch Control Group ======*/
-	JMP  = 0xC3, CALL = 0xCD, RET = 0xC9,
-	JNZ  = 0xC2, CNZ  = 0xC4, RNZ = 0xC0,
-	JZ   = 0xCA, CZ   = 0xCC, RZ  = 0xC8,
-	JNC  = 0xD2, CNC  = 0xD4, RNC = 0xD0,
-	JC   = 0xDA, CC   = 0xDC, RC  = 0xD8,
-	JPO  = 0xE2, CPO  = 0xE4, RPO = 0xE0,
-	JPE  = 0xEA, CPE  = 0xEC, RPE = 0xE8,
-	JP   = 0xF2, CP   = 0xF4, RP  = 0xF0,
-	JM   = 0xFA, CM   = 0xFC, RM  = 0xF8,
+	JMP = 0xC3, CALL = 0xCD, RET = 0xC9,
+	JNZ = 0xC2, CNZ = 0xC4, RNZ = 0xC0,
+	JZ = 0xCA, CZ = 0xCC, RZ = 0xC8,
+	JNC = 0xD2, CNC = 0xD4, RNC = 0xD0,
+	JC = 0xDA, CC = 0xDC, RC = 0xD8,
+	JPO = 0xE2, CPO = 0xE4, RPO = 0xE0,
+	JPE = 0xEA, CPE = 0xEC, RPE = 0xE8,
+	JP = 0xF2, CP = 0xF4, RP = 0xF0,
+	JM = 0xFA, CM = 0xFC, RM = 0xF8,
 
 	PCHL = 0xE9,
 
 	/*====== Stack Operations ======*/
-	PUSH_B   = 0xC5, POP_B   = 0xC1,
-	PUSH_D   = 0xE5, POP_D   = 0xE1,
-	PUSH_H   = 0xD5, POP_H   = 0xD1,
+	PUSH_B = 0xC5, POP_B = 0xC1,
+	PUSH_D = 0xE5, POP_D = 0xE1,
+	PUSH_H = 0xD5, POP_H = 0xD1,
 	PUSH_PSW = 0xF5, POP_PSW = 0xF1,
 
 	XTHL = 0xE3, SPHL = 0xF9,
 
 	/*====== I/O and Machine Control ======*/
 	IN = 0xD3, OUT = 0xDB,
-	DI = 0xF3, EI  = 0xFB,
+	DI = 0xF3, EI = 0xFB,
 
-	NOP  = 0x00,
-	HLT  = 0x76,
+	NOP = 0x00,
+	HLT = 0x76,
 
 	/*====== Restart ======*/
 	RST_0 = 0xC7, RST_1 = 0xCF, RST_2 = 0xD7, RST_3 = 0xDF, RST_4 = 0xE7, RST_5 = 0xEF, RST_6 = 0xF7, RST_7 = 0xFF,
@@ -171,6 +192,69 @@ HLT	;HALT
 #define DE_PAIR ((uint16_t)registers[REG_D] << 8 | (uint16_t)registers[REG_E])
 #define HL_PAIR ((uint16_t)registers[REG_H] << 8 | (uint16_t)registers[REG_L])
 
+
+uint8_t update_flag(uint8_t flags, uint16_t previous, uint16_t current, int16_t aux_op) {
+
+	//FLAG Z
+	if (current == 0)
+		flags = SET_BIT(flags, FLAG_Z);
+	else
+		flags = RESET_BIT(flags, FLAG_Z);
+
+	//FLAG S
+	if (current & 0x80)
+		flags = SET_BIT(flags, FLAG_S);
+	else
+		flags = RESET_BIT(flags, FLAG_S);
+
+	//FLAG CY
+	if (current > 0xff)
+		flags = SET_BIT(flags, FLAG_CY);
+	else
+		flags = RESET_BIT(flags, FLAG_CY);
+
+	if ((int16_t)current < 0)
+		flags = SET_BIT(flags, FLAG_CY);
+	else
+		flags = RESET_BIT(flags, FLAG_CY);
+
+	//FLAG P
+	int counter = 0;
+	for (int i = 0; i < 8; ++i) {
+		counter += (current & (1 << i) != 0);
+	}
+
+	if (counter & 1)
+		flags = RESET_BIT(flags, FLAG_P);
+	else
+		flags = SET_BIT(flags, FLAG_P);
+
+	//FLAG AC
+	uint8_t A = previous;
+	uint8_t B = (uint8_t)((int8_t)current - (int8_t)previous);
+
+	if ((0xf & A) + (0xf & B) > 0xf)
+		flags = SET_BIT(flags, FLAG_AC);
+	else
+		flags = RESET_BIT(flags, FLAG_AC);
+
+	int16_t nibble = (previous & 0xf);
+	if (aux_op < 1) {
+		if (nibble < -1 * aux_op)
+			flags = SET_BIT(flags, FLAG_AC);
+		else
+			flags = RESET_BIT(flags, FLAG_AC);
+	}
+	else if (aux_op > 1) {
+		if (nibble + aux_op > 0xf)
+			flags = SET_BIT(flags, FLAG_AC);
+		else
+			flags = RESET_BIT(flags, FLAG_AC);
+	}
+	return flags;
+}
+
+
 void mov(int dst, int src) {
 	if (src == dst) return;
 	uint8_t src_val;
@@ -180,30 +264,263 @@ void mov(int dst, int src) {
 
 void cmp(uint8_t comperand) {
 	int result = (int8_t)registers[REG_A] - (int8_t)comperand;
-	if (result > 0) {
-		flags &= ~FLAG_CY;
-		flags &= ~FLAG_Z;
-		flags &= ~FLAG_S;
-	} else if (result == 0) {
-		flags &= ~FLAG_S;
-		flags |= FLAG_Z;
-	} else {
-		flags |= FLAG_S | FLAG_CY;
-		flags &= ~FLAG_Z;
-	}
+
+	registers[REG_F] = update_flag(registers[REG_F], registers[REG_A], result, -(int8_t)comperand);
+	/*	if (result > 0) {
+			flags &= ~FLAG_CY;
+			flags &= ~FLAG_Z;
+			flags &= ~FLAG_S;
+		} else if (result == 0) {
+			flags &= ~FLAG_S;
+			flags |= FLAG_Z;
+		} else {
+			flags |= FLAG_S | FLAG_CY;
+			flags &= ~FLAG_Z;
+		}*/
 }
 
-void push (int rp, uint16_t &sp) {
+void push(int rp, uint16_t& sp) {
 	g_memory[--sp] = registers[rp];
 	g_memory[--sp] = registers[rp + 1];
 }
 
-void pop (int rp, uint16_t &sp) {
+void pop(int rp, uint16_t& sp) {
 	registers[rp + 1] = g_memory[sp++];
-	registers[rp]     = g_memory[sp++];
+	registers[rp] = g_memory[sp++];
+}
+
+inline int is_char(char c) {
+	return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z');
+}
+
+inline int is_num(char c) {
+	return (c >= '0' && c <= '9');
+}
+
+
+/*
+*
+* THE ORDER OF TokenKind and keywords **MUST BE THE SAME** otherwise it'll break **EVERYTHING**
+*
+*/
+
+#define ARRAY_COUNT(arr) (sizeof(arr) / sizeof(*arr))
+
+inline int StrCompare(String a, String b)
+{
+	int64_t count = (int64_t)Minimum(a.length, b.length);
+	return memcmp(a.data, b.data, count);
+}
+
+inline int StrCompareCaseInsensitive(String a, String b)
+{
+	int64_t count = (int64_t)Minimum(a.length, b.length);
+	for (int64_t index = 0; index < count; ++index)
+	{
+		if (a.data[index] != b.data[index] && a.data[index] + 32 != b.data[index] && a.data[index] != b.data[index])
+		{
+			return a.data[index] - b.data[index];
+		}
+	}
+	return 0;
+}
+
+inline bool StrMatch(String a, String b)
+{
+	if (a.length != b.length)
+		return false;
+	return StrCompare(a, b) == 0;
+}
+
+inline bool StrMatchCaseInsensitive(String a, String b)
+{
+	if (a.length != b.length)
+		return false;
+	return StrCompareCaseInsensitive(a, b) == 0;
+}
+
+enum TokenKind {
+	TOKEN_MOV, TOKEN_MVI, TOKEN_LXI, TOKEN_ADD, TOKEN_ADC, TOKEN_SBB, TOKEN_SUB,
+	TOKEN_ADI, TOKEN_INX, TOKEN_JMP, TOKEN_JNC,
+
+
+	TOKEN_REG_A, TOKEN_REG_F, TOKEN_REG_B, TOKEN_REG_C,
+	TOKEN_REG_D, TOKEN_REG_E, TOKEN_REG_H, TOKEN_REG_L, TOKEN_REG_M,
+
+	_TOKEN_KEYWORD_SEPARATOR,
+
+	TOKEN_ID, TOKEN_COLON, TOKEN_NUMBER, TOKEN_COMMA, TOKEN_ERROR, TOKEN_EOI,
+
+
+
+};
+
+
+
+static String keywords[] = {
+	"MOV", 	"MVI", 	"LXI","ADD", "ADC", "SBB", 	"SUB",
+	"ADI", 	"INX", 	"JMP", 	"JNC",
+	"A",	"F",	"B",	"C",
+	"D",	"E",	"H",	"L",	"M",
+};
+
+static_assert(_TOKEN_KEYWORD_SEPARATOR == ARRAY_COUNT(keywords), "You messed up big time, read the comment above");
+
+struct Tokenizer {
+	const char* ptr;
+	String id;
+	uint64_t value;
+	TokenKind kind;
+};
+
+
+bool tokenize(Tokenizer* t) {
+	const char* ptr = t->ptr;
+	while (*ptr) {
+
+		if (*ptr == ' ' || *ptr == '\t') {
+			while (*ptr == ' ' || *ptr == '\t') ptr++;
+			continue;
+		}
+
+		if (*ptr == '\n' || *ptr == '\r') {
+			ptr++;
+			if (*ptr && *ptr == '\n') ptr++;
+			t->kind = TOKEN_EOI;
+			t->ptr = ptr;
+			return true;
+		}
+
+		if (*ptr == ';') {
+			while (*ptr && *ptr != '\n' && *ptr != '\r')
+				ptr++;
+			if (*ptr) ptr++;
+			if (*ptr && *ptr == '\n') ptr++;
+			t->kind = TOKEN_EOI;
+			t->ptr = ptr;
+			return true;
+		}
+
+		if (is_char(*ptr)) {
+			t->id.data = (uint8_t*)ptr++;
+			while (is_char(*ptr) || *ptr == '_' || is_num(*ptr)) {
+				++ptr;
+			}
+			t->kind = TOKEN_ID;
+			t->id.length = (int64_t)(ptr - (char*)t->id.data);
+			for (int i = 0; i < ARRAY_COUNT(keywords); ++i) {
+				if (StrMatchCaseInsensitive(t->id, keywords[i])) {
+					t->kind = (TokenKind)i;
+					break;
+				}
+			}
+			t->ptr = ptr;
+			return true;
+		}
+
+		if (*ptr == ':') {
+			t->kind = TOKEN_COLON;
+			t->ptr = ptr + 1;
+			return true;
+		}
+
+		if (*ptr == ',') {
+			t->kind = TOKEN_COMMA;
+			t->ptr = ptr + 1;
+			return true;
+		}
+
+		if (is_num(*ptr)) {
+			t->kind = TOKEN_NUMBER;
+			const char* start = ptr;
+			while (is_num(*ptr)) {
+				++ptr;
+			}
+			if (*ptr == 'H' || *ptr == 'h') {
+				t->value = strtoull(start, (char**)&t->ptr, 16);
+				t->ptr++;
+			}
+			else {
+				t->value = strtoull(start, (char**)&t->ptr, 10);
+			}
+
+			if (errno == ERANGE || t->value > 0xffff) {
+				t->kind = TOKEN_ERROR;
+				t->id = "Number is out of range";
+			}
+			return true;
+		}
+
+		t->kind = TOKEN_ERROR;
+		t->id = "bad character";
+		return true;
+	}
+	return false;
+}
+
+Tokenizer create_tokenizer(const char* ptr) {
+	Tokenizer result = {};
+	result.ptr = ptr;
+	return result;
 }
 
 int main()
+{
+	const char* line = R"foo(
+		START:	LXI H, 2040H	;Load size of array
+		MVI D, 00H	;Clear D registers to set up a flag
+		MOV C, M	;Set C registers with number of elements in list
+		DCR C	;Decrement C
+		INX H	;Increment memory to access list
+		CHECK:	MOV A, M	;Retrieve list element in Accumulator
+		INX H	;Increment memory to access next element
+		CMP M	;Compare Accumulator with next element
+		JC NEXTBYTE	;If accumulator is less then jump to NEXTBYTE
+		JZ NEXTBYTE	;If accumulator is equal then jump to NEXTBYTE
+		MOV B, M	;Swap the two elements
+		MOV M, A
+		DCX H
+		MOV M, B
+		INX H
+		MVI D, 01H	;If exchange occurs save 01 in D registers
+		NEXTBYTE:	DCR C	;Decrement C for next iteration
+		JNZ CHECK	;Jump to CHECK if C>0
+		MOV A, D	;Transfer contents of D to Accumulator
+		CPI 01H	;Compare accumulator contents with 01H
+		JZ START	;Jump to START if D=01H
+		HLT	;HALT
+			)foo";
+	Tokenizer tokenizer = create_tokenizer(line);
+
+	while (tokenize(&tokenizer)) {
+		if (tokenizer.kind == TOKEN_ERROR) {
+			printf("\nERROR: %s\n", tokenizer.id.data);
+			break;
+		}
+		else if (tokenizer.kind == TOKEN_EOI) {
+			printf("\n");
+		}
+		else if (tokenizer.kind == TOKEN_NUMBER) {
+			printf("0x%x ", (uint8_t)tokenizer.value);
+		}
+		else if (tokenizer.kind == TOKEN_COLON) {
+			printf(": ");
+		}
+		else if (tokenizer.kind == TOKEN_COMMA) {
+			printf(", ");
+		}
+		else if (tokenizer.kind == TOKEN_ID) {
+			printf("%.*s ", (int32_t)tokenizer.id.length, tokenizer.id.data);
+		}
+		else {
+			printf("%s ", keywords[tokenizer.kind].data);
+		}
+
+	}
+
+}
+
+int main2()
 {
 	uint8_t* ip = g_memory + 0x2000;
 
@@ -277,470 +594,488 @@ int main()
 	int iter = 0;
 	for (bool running = true; running; iter++) {
 		switch (g_memory[PC]) {
-			case XTHL:
-				TMP              = registers[REG_L];
-				registers[REG_L] = g_memory[SP];
-				g_memory[SP]     = TMP;
-				TMP              = registers[REG_H];
-				registers[REG_H] = g_memory[SP + 1];
-				g_memory[SP + 1] = TMP;
-				++PC; break;
-			case SPHL:
-				SP = HL_PAIR;
-				++PC; break;
-			case PUSH_B:
-				push(REG_B, SP);
-				++PC; break;
-			case PUSH_D:
-				push(REG_D, SP);
-				++PC; break;
-			case PUSH_H:
-				push(REG_H, SP);
-				++PC; break;
-			case PUSH_PSW:
-				push(REG_A, SP);
-				++PC; break;
-			case POP_B:
-				pop(REG_B, SP);
-				++PC; break;
-			case POP_D:
-				pop(REG_D, SP);
-				++PC; break;
-			case POP_H:
-				pop(REG_H, SP);
-				++PC; break;
-			case POP_PSW:
-				pop(REG_A, SP);
-				++PC; break;
-			case LDAX_B:
-				registers[REG_A] = g_memory[BC_PAIR];
-				++PC; break;
-			case LDAX_D:
-				registers[REG_A] = g_memory[DE_PAIR];
-				++PC; break;
-			case STAX_B:
-				g_memory[BC_PAIR] = registers[REG_A];
-				++PC; break;
-			case STAX_D:
-				g_memory[DE_PAIR] = registers[REG_A];
-				++PC; break;
-			case LHLD:
-				addr = (g_memory[PC + 1] & 0xFF) | ((g_memory[PC + 2] & 0xFF) << 8);
-				registers[REG_L] = g_memory[addr];
-				registers[REG_H] = g_memory[addr + 1];
-				PC += 3; break;
-			case SHLD:
-				addr = (g_memory[PC + 1] & 0xFF) | ((g_memory[PC + 2] & 0xFF) << 8);
-				g_memory[addr]     = registers[REG_L];
-				g_memory[addr + 1] = registers[REG_H];
-				PC += 3; break;
-				break;
-			case LDA:
-				addr = (g_memory[PC + 1] & 0xFF) | ((g_memory[PC + 2] & 0xFF) << 8);
-				registers[REG_A] = g_memory[addr];
-				PC += 3; break;
-			case STA:
-				addr = (g_memory[PC + 1] & 0xFF) | ((g_memory[PC + 2] & 0xFF) << 8);
-				g_memory[addr] = registers[REG_A];
-				PC += 3; break;
-			case XCHG:
-				TMP              = registers[REG_L];
-				registers[REG_L] = registers[REG_E];
-				registers[REG_E] = TMP;
-				TMP              = registers[REG_H];
-				registers[REG_H] = registers[REG_D];
-				registers[REG_D] = TMP;
-				++PC; break;
-			case LXI_B :
-				registers[REG_C] = g_memory[++PC];
-				registers[REG_B] = g_memory[++PC];
-				++PC;
-				break;
-			case LXI_D :
-				registers[REG_E] = g_memory[++PC];
-				registers[REG_D] = g_memory[++PC];
-				++PC;
-				break;
-			case LXI_H :
-				registers[REG_L] = g_memory[++PC];
-				registers[REG_H] = g_memory[++PC];
-				++PC;
-				break;
-			case LXI_SP:
-				SP = g_memory[PC + 1] | (g_memory[PC + 2] << 8);
+		case XTHL:
+			TMP = registers[REG_L];
+			registers[REG_L] = g_memory[SP];
+			g_memory[SP] = TMP;
+			TMP = registers[REG_H];
+			registers[REG_H] = g_memory[SP + 1];
+			g_memory[SP + 1] = TMP;
+			++PC; break;
+		case SPHL:
+			SP = HL_PAIR;
+			++PC; break;
+		case PUSH_B:
+			push(REG_B, SP);
+			++PC; break;
+		case PUSH_D:
+			push(REG_D, SP);
+			++PC; break;
+		case PUSH_H:
+			push(REG_H, SP);
+			++PC; break;
+		case PUSH_PSW:
+			push(REG_A, SP);
+			++PC; break;
+		case POP_B:
+			pop(REG_B, SP);
+			++PC; break;
+		case POP_D:
+			pop(REG_D, SP);
+			++PC; break;
+		case POP_H:
+			pop(REG_H, SP);
+			++PC; break;
+		case POP_PSW:
+			pop(REG_A, SP);
+			++PC; break;
+		case LDAX_B:
+			registers[REG_A] = g_memory[BC_PAIR];
+			++PC; break;
+		case LDAX_D:
+			registers[REG_A] = g_memory[DE_PAIR];
+			++PC; break;
+		case STAX_B:
+			g_memory[BC_PAIR] = registers[REG_A];
+			++PC; break;
+		case STAX_D:
+			g_memory[DE_PAIR] = registers[REG_A];
+			++PC; break;
+		case LHLD:
+			addr = (g_memory[PC + 1] & 0xFF) | ((g_memory[PC + 2] & 0xFF) << 8);
+			registers[REG_L] = g_memory[addr];
+			registers[REG_H] = g_memory[addr + 1];
+			PC += 3; break;
+		case SHLD:
+			addr = (g_memory[PC + 1] & 0xFF) | ((g_memory[PC + 2] & 0xFF) << 8);
+			g_memory[addr] = registers[REG_L];
+			g_memory[addr + 1] = registers[REG_H];
+			PC += 3; break;
+			break;
+		case LDA:
+			addr = (g_memory[PC + 1] & 0xFF) | ((g_memory[PC + 2] & 0xFF) << 8);
+			registers[REG_A] = g_memory[addr];
+			PC += 3; break;
+		case STA:
+			addr = (g_memory[PC + 1] & 0xFF) | ((g_memory[PC + 2] & 0xFF) << 8);
+			g_memory[addr] = registers[REG_A];
+			PC += 3; break;
+		case XCHG:
+			TMP = registers[REG_L];
+			registers[REG_L] = registers[REG_E];
+			registers[REG_E] = TMP;
+			TMP = registers[REG_H];
+			registers[REG_H] = registers[REG_D];
+			registers[REG_D] = TMP;
+			++PC; break;
+		case LXI_B:
+			registers[REG_C] = g_memory[++PC];
+			registers[REG_B] = g_memory[++PC];
+			++PC;
+			break;
+		case LXI_D:
+			registers[REG_E] = g_memory[++PC];
+			registers[REG_D] = g_memory[++PC];
+			++PC;
+			break;
+		case LXI_H:
+			registers[REG_L] = g_memory[++PC];
+			registers[REG_H] = g_memory[++PC];
+			++PC;
+			break;
+		case LXI_SP:
+			SP = g_memory[PC + 1] | (g_memory[PC + 2] << 8);
+			PC += 3;
+			break;
+
+		case MVI_A:
+			registers[REG_A] = g_memory[++PC];
+			++PC;
+			break;
+		case MVI_B:
+			registers[REG_B] = g_memory[++PC];
+			++PC;
+			break;
+		case MVI_C:
+			registers[REG_C] = g_memory[++PC];
+			++PC;
+			break;
+		case MVI_D:
+			registers[REG_D] = g_memory[++PC];
+			++PC;
+			break;
+		case MVI_H:
+			registers[REG_H] = g_memory[++PC];
+			++PC;
+			break;
+		case MVI_L:
+			registers[REG_L] = g_memory[++PC];
+			++PC;
+			break;
+		case MVI_M:
+			g_memory[HL_PAIR] = g_memory[++PC];
+			++PC;
+			break;
+
+#if 0
+			//This is doable, might be something that we might do in the future after all the
+			//bugs have been fixed
+#define MOV(A, B) case MOV_##A_##B: \
+			mov(REG_##A, REG_##B); \
+			++PC; \
+			break
+
+			MOV(A, A);
+			MOV(A, B);
+			MOV(A, C);
+			MOV(A, D);
+			MOV(A, E);
+			MOV(A, D);
+			MOV(A, H);
+			MOV(A, L);
+			MOV(A, M);
+
+#undef MOV
+#endif
+		case MOV_A_A:
+			++PC;
+			break;
+		case MOV_A_B:
+			mov(REG_A, REG_B);
+			++PC;
+			break;
+		case MOV_A_C:
+			mov(REG_A, REG_C);
+			++PC;
+			break;
+		case MOV_A_D:
+			mov(REG_A, REG_D);
+			++PC;
+			break;
+		case MOV_A_E:
+			mov(REG_A, REG_E);
+			++PC;
+			break;
+		case MOV_A_H:
+			mov(REG_A, REG_H);
+			++PC;
+			break;
+		case MOV_A_L:
+			mov(REG_A, REG_L);
+			++PC;
+			break;
+		case MOV_A_M:
+			mov(REG_A, REG_M);
+			++PC;
+			break;
+
+		case MOV_B_A:
+			mov(REG_B, REG_A);
+			++PC;
+			break;
+		case MOV_B_B:
+			++PC;
+			break;
+		case MOV_B_C:
+			mov(REG_B, REG_C);
+			++PC;
+			break;
+		case MOV_B_D:
+			mov(REG_B, REG_D);
+			++PC;
+			break;
+		case MOV_B_E:
+			mov(REG_B, REG_E);
+			++PC;
+			break;
+		case MOV_B_H:
+			mov(REG_B, REG_H);
+			++PC;
+			break;
+		case MOV_B_L:
+			mov(REG_B, REG_L);
+			++PC;
+			break;
+		case MOV_B_M:
+			mov(REG_B, REG_M);
+			++PC;
+			break;
+
+		case MOV_C_A:
+			mov(REG_C, REG_A);
+			++PC;
+			break;
+		case MOV_C_B:
+			mov(REG_C, REG_B);
+			++PC;
+			break;
+		case MOV_C_C:
+			++PC;
+			break;
+		case MOV_C_D:
+			mov(REG_C, REG_D);
+			++PC;
+			break;
+		case MOV_C_E:
+			mov(REG_C, REG_E);
+			++PC;
+			break;
+		case MOV_C_H:
+			mov(REG_C, REG_H);
+			++PC;
+			break;
+		case MOV_C_L:
+			mov(REG_C, REG_L);
+			++PC;
+			break;
+		case MOV_C_M:
+			mov(REG_C, REG_M);
+			++PC;
+			break;
+
+		case MOV_D_A:
+			mov(REG_D, REG_A);
+			++PC;
+			break;
+		case MOV_D_B:
+			mov(REG_D, REG_B);
+			++PC;
+			break;
+		case MOV_D_C:
+			mov(REG_D, REG_C);
+			++PC;
+			break;
+		case MOV_D_D:
+			++PC;
+			break;
+		case MOV_D_E:
+			mov(REG_D, REG_E);
+			++PC;
+			break;
+		case MOV_D_H:
+			mov(REG_D, REG_H);
+			++PC;
+			break;
+		case MOV_D_L:
+			mov(REG_D, REG_L);
+			++PC;
+			break;
+		case MOV_D_M:
+			mov(REG_D, REG_M);
+			++PC;
+			break;
+
+		case MOV_E_A:
+			mov(REG_E, REG_A);
+			++PC;
+			break;
+		case MOV_E_B:
+			mov(REG_E, REG_B);
+			++PC;
+			break;
+		case MOV_E_C:
+			mov(REG_E, REG_C);
+			++PC;
+			break;
+		case MOV_E_D:
+			mov(REG_E, REG_D);
+			++PC;
+			break;
+		case MOV_E_E:
+			++PC;
+			break;
+		case MOV_E_H:
+			mov(REG_E, REG_H);
+			++PC;
+			break;
+		case MOV_E_L:
+			mov(REG_E, REG_L);
+			++PC;
+			break;
+		case MOV_E_M:
+			mov(REG_E, REG_M);
+			++PC;
+			break;
+
+		case MOV_H_A:
+			mov(REG_H, REG_A);
+			++PC;
+			break;
+		case MOV_H_B:
+			mov(REG_H, REG_B);
+			++PC;
+			break;
+		case MOV_H_C:
+			mov(REG_H, REG_C);
+			++PC;
+			break;
+		case MOV_H_D:
+			mov(REG_H, REG_D);
+			++PC;
+			break;
+		case MOV_H_E:
+			mov(REG_H, REG_E);
+			++PC;
+			break;
+		case MOV_H_H:
+			++PC;
+			break;
+		case MOV_H_L:
+			mov(REG_H, REG_L);
+			++PC;
+			break;
+		case MOV_H_M:
+			mov(REG_H, REG_M);
+			++PC;
+			break;
+
+		case MOV_L_A:
+			mov(REG_L, REG_A);
+			++PC;
+			break;
+		case MOV_L_B:
+			mov(REG_L, REG_B);
+			++PC;
+			break;
+		case MOV_L_C:
+			mov(REG_L, REG_C);
+			++PC;
+			break;
+		case MOV_L_D:
+			mov(REG_L, REG_D);
+			++PC;
+			break;
+		case MOV_L_E:
+			mov(REG_L, REG_E);
+			++PC;
+			break;
+		case MOV_L_H:
+			mov(REG_L, REG_H);
+			++PC;
+			break;
+		case MOV_L_L:
+			++PC;
+			break;
+		case MOV_L_M:
+			mov(REG_L, REG_M);
+			++PC;
+			break;
+
+		case MOV_M_A:
+			mov(REG_M, REG_A);
+			++PC;
+			break;
+		case MOV_M_B:
+			mov(REG_M, REG_B);
+			++PC;
+			break;
+		case MOV_M_C:
+			mov(REG_M, REG_C);
+			++PC;
+			break;
+		case MOV_M_D:
+			mov(REG_M, REG_D);
+			++PC;
+			break;
+		case MOV_M_E:
+			mov(REG_M, REG_E);
+			++PC;
+			break;
+		case MOV_M_H:
+			mov(REG_M, REG_H);
+			++PC;
+			break;
+		case MOV_M_L:
+			mov(REG_M, REG_L);
+			++PC;
+			break;
+
+		case DCR_C: {
+			registers[REG_F] = update_flag(registers[REG_F], registers[REG_C], (uint16_t)registers[REG_C] - 1, -1);
+			registers[REG_C]--;
+			PC++;
+		} break;
+
+		case DCX_H:
+			registers[REG_H] -= (--registers[REG_L] == 0xff);
+			//(*((uint16_t*)&registers[REG_L]))--;
+			PC++;
+			break;
+
+		case INX_H:
+			registers[REG_H] += (++registers[REG_L] == 0);
+			//(*((uint16_t*)&registers[REG_L]))++;
+			PC++;
+			break;
+		case CMP_A: {
+			registers[REG_F] &= ~FLAG_S;
+			registers[REG_F] |= FLAG_Z;
+			PC++;
+		} break;
+		case CMP_B: {
+			cmp(registers[REG_B]);
+			PC++;
+		} break;
+		case CMP_C: {
+			cmp(registers[REG_C]);
+			PC++;
+		} break;
+		case CMP_D: {
+			cmp(registers[REG_D]);
+			PC++;
+		} break;
+		case CMP_E: {
+			cmp(registers[REG_E]);
+			PC++;
+		} break;
+		case CMP_H: {
+			cmp(registers[REG_H]);
+			PC++;
+		} break;
+		case CMP_L: {
+			cmp(registers[REG_L]);
+			PC++;
+		} break;
+		case CMP_M: {
+			cmp(g_memory[HL_PAIR]);
+			PC++;
+		} break;
+		case CPI: {
+			cmp(g_memory[++PC]);
+			PC++;
+		} break;
+
+		case JC:
+			if (registers[REG_F] & FLAG_CY)
+				PC = (uint16_t)g_memory[PC + 2] << 8 | g_memory[PC + 1];
+			else
 				PC += 3;
-				break;
+			break;
 
-			case MVI_A:
-				registers[REG_A] = g_memory[++PC];
-				++PC;
-				break;
-			case MVI_B:
-				registers[REG_B] = g_memory[++PC];
-				++PC;
-				break;
-			case MVI_C:
-				registers[REG_C] = g_memory[++PC];
-				++PC;
-				break;
-			case MVI_D:
-				registers[REG_D] = g_memory[++PC];
-				++PC;
-				break;
-			case MVI_H:
-				registers[REG_H] = g_memory[++PC];
-				++PC;
-				break;
-			case MVI_L:
-				registers[REG_L] = g_memory[++PC];
-				++PC;
-				break;
-			case MVI_M:
-				g_memory[HL_PAIR] = g_memory[++PC];
-				++PC;
-				break;
+		case JZ:
+			if (registers[REG_F] & FLAG_Z)
+				PC = (uint16_t)g_memory[PC + 2] << 8 | g_memory[PC + 1];
+			else
+				PC += 3;
+			break;
 
-			case MOV_A_A:
-				++PC;
-				break;
-			case MOV_A_B:
-				mov(REG_A, REG_B);
-				++PC;
-				break;
-			case MOV_A_C:
-				mov(REG_A, REG_C);
-				++PC;
-				break;
-			case MOV_A_D:
-				mov(REG_A, REG_D);
-				++PC;
-				break;
-			case MOV_A_E:
-				mov(REG_A, REG_E);
-				++PC;
-				break;
-			case MOV_A_H:
-				mov(REG_A, REG_H);
-				++PC;
-				break;
-			case MOV_A_L:
-				mov(REG_A, REG_L);
-				++PC;
-				break;
-			case MOV_A_M:
-				mov(REG_A, REG_M);
-				++PC;
-				break;
+		case JNZ:
+			if (registers[REG_F] & FLAG_Z)
+				PC += 3;
+			else
+				PC = (uint16_t)g_memory[PC + 2] << 8 | g_memory[PC + 1];
+			break;
 
-			case MOV_B_A:
-				mov(REG_B, REG_A);
-				++PC;
-				break;
-			case MOV_B_B:
-				++PC;
-				break;
-			case MOV_B_C:
-				mov(REG_B, REG_C);
-				++PC;
-				break;
-			case MOV_B_D:
-				mov(REG_B, REG_D);
-				++PC;
-				break;
-			case MOV_B_E:
-				mov(REG_B, REG_E);
-				++PC;
-				break;
-			case MOV_B_H:
-				mov(REG_B, REG_H);
-				++PC;
-				break;
-			case MOV_B_L:
-				mov(REG_B, REG_L);
-				++PC;
-				break;
-			case MOV_B_M:
-				mov(REG_B, REG_M);
-				++PC;
-				break;
+		case HLT:
+			running = false;
+			++PC;
+			break;
 
-			case MOV_C_A:
-				mov(REG_C, REG_A);
-				++PC;
-				break;
-			case MOV_C_B:
-				mov(REG_C, REG_B);
-				++PC;
-				break;
-			case MOV_C_C:
-				++PC;
-				break;
-			case MOV_C_D:
-				mov(REG_C, REG_D);
-				++PC;
-				break;
-			case MOV_C_E:
-				mov(REG_C, REG_E);
-				++PC;
-				break;
-			case MOV_C_H:
-				mov(REG_C, REG_H);
-				++PC;
-				break;
-			case MOV_C_L:
-				mov(REG_C, REG_L);
-				++PC;
-				break;
-			case MOV_C_M:
-				mov(REG_C, REG_M);
-				++PC;
-				break;
+		case NOP:
+			++PC;
+			break;
 
-			case MOV_D_A:
-				mov(REG_D, REG_A);
-				++PC;
-				break;
-			case MOV_D_B:
-				mov(REG_D, REG_B);
-				++PC;
-				break;
-			case MOV_D_C:
-				mov(REG_D, REG_C);
-				++PC;
-				break;
-			case MOV_D_D:
-				++PC;
-				break;
-			case MOV_D_E:
-				mov(REG_D, REG_E);
-				++PC;
-				break;
-			case MOV_D_H:
-				mov(REG_D, REG_H);
-				++PC;
-				break;
-			case MOV_D_L:
-				mov(REG_D, REG_L);
-				++PC;
-				break;
-			case MOV_D_M:
-				mov(REG_D, REG_M);
-				++PC;
-				break;
-
-			case MOV_E_A:
-				mov(REG_E, REG_A);
-				++PC;
-				break;
-			case MOV_E_B:
-				mov(REG_E, REG_B);
-				++PC;
-				break;
-			case MOV_E_C:
-				mov(REG_E, REG_C);
-				++PC;
-				break;
-			case MOV_E_D:
-				mov(REG_E, REG_D);
-				++PC;
-				break;
-			case MOV_E_E:
-				++PC;
-				break;
-			case MOV_E_H:
-				mov(REG_E, REG_H);
-				++PC;
-				break;
-			case MOV_E_L:
-				mov(REG_E, REG_L);
-				++PC;
-				break;
-			case MOV_E_M:
-				mov(REG_E, REG_M);
-				++PC;
-				break;
-
-			case MOV_H_A:
-				mov(REG_H, REG_A);
-				++PC;
-				break;
-			case MOV_H_B:
-				mov(REG_H, REG_B);
-				++PC;
-				break;
-			case MOV_H_C:
-				mov(REG_H, REG_C);
-				++PC;
-				break;
-			case MOV_H_D:
-				mov(REG_H, REG_D);
-				++PC;
-				break;
-			case MOV_H_E:
-				mov(REG_H, REG_E);
-				++PC;
-				break;
-			case MOV_H_H:
-				++PC;
-				break;
-			case MOV_H_L:
-				mov(REG_H, REG_L);
-				++PC;
-				break;
-			case MOV_H_M:
-				mov(REG_H, REG_M);
-				++PC;
-				break;
-
-			case MOV_L_A:
-				mov(REG_L, REG_A);
-				++PC;
-				break;
-			case MOV_L_B:
-				mov(REG_L, REG_B);
-				++PC;
-				break;
-			case MOV_L_C:
-				mov(REG_L, REG_C);
-				++PC;
-				break;
-			case MOV_L_D:
-				mov(REG_L, REG_D);
-				++PC;
-				break;
-			case MOV_L_E:
-				mov(REG_L, REG_E);
-				++PC;
-				break;
-			case MOV_L_H:
-				mov(REG_L, REG_H);
-				++PC;
-				break;
-			case MOV_L_L:
-				++PC;
-				break;
-			case MOV_L_M:
-				mov(REG_L, REG_M);
-				++PC;
-				break;
-
-			case MOV_M_A:
-				mov(REG_M, REG_A);
-				++PC;
-				break;
-			case MOV_M_B:
-				mov(REG_M, REG_B);
-				++PC;
-				break;
-			case MOV_M_C:
-				mov(REG_M, REG_C);
-				++PC;
-				break;
-			case MOV_M_D:
-				mov(REG_M, REG_D);
-				++PC;
-				break;
-			case MOV_M_E:
-				mov(REG_M, REG_E);
-				++PC;
-				break;
-			case MOV_M_H:
-				mov(REG_M, REG_H);
-				++PC;
-				break;
-			case MOV_M_L:
-				mov(REG_M, REG_L);
-				++PC;
-				break;
-
-			case DCR_C:
-				registers[REG_C]--;
-				flags |= FLAG_Z * (registers[REG_C] == 0);
-				flags |= FLAG_S * (registers[REG_C] & (0x80));
-				PC++;
-				break;
-
-			case DCX_H:
-				if ((*((uint16_t*)&registers[REG_L]))-- == 0x2003)
-					__debugbreak();
-				PC++;
-				break;
-
-			case INX_H:
-				//registers[REG_H] += (++registers[REG_L] == 0);
-				if((*((uint16_t*)&registers[REG_L]))++ == 0x2003)
-					__debugbreak();
-				PC++;
-				break;
-			case CMP_A: {
-				flags &= ~FLAG_S;
-				flags |= FLAG_Z;
-				PC++;
-			} break;
-			case CMP_B: {
-				cmp(registers[REG_B]);
-				PC++;
-			} break;
-			case CMP_C: {
-				cmp(registers[REG_C]);
-				PC++;
-			} break;
-			case CMP_D: {
-				cmp(registers[REG_D]);
-				PC++;
-			} break;
-			case CMP_E: {
-				cmp(registers[REG_E]);
-				PC++;
-			} break;
-			case CMP_H: {
-				cmp(registers[REG_H]);
-				PC++;
-			} break;
-			case CMP_L: {
-				cmp(registers[REG_L]);
-				PC++;
-			} break;
-			case CMP_M: {
-				cmp(g_memory[HL_PAIR]);
-				PC++;
-			} break;
-			case CPI: {
-				cmp(g_memory[++PC]);
-				PC++;
-			} break;
-
-			case JC:
-				if (flags & FLAG_CY)
-					PC = (uint16_t)g_memory[PC + 2] << 8 | g_memory[PC + 1];
-				else
-					PC += 3;
-				break;
-
-			case JZ:
-				if (flags & FLAG_Z)
-					PC = (uint16_t)g_memory[PC + 2] << 8 | g_memory[PC + 1];
-				else
-					PC += 3;
-				break;
-
-			case JNZ:
-				if (flags & FLAG_Z)
-					PC += 3;
-				else
-					PC = (uint16_t)g_memory[PC + 2] << 8 | g_memory[PC + 1];
-				break;
-
-			case HLT:
-				running = false;
-				++PC;
-				break;
-
-			case NOP:
-                ++PC;
-				break;
-
-			default: panic("Should be unreachable");
+		default: panic("Should be unreachable");
 		}
 
 	}
