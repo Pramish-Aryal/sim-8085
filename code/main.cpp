@@ -178,6 +178,21 @@ void mov(int dst, int src) {
 	(dst == REG_M) ? g_memory[HL_PAIR] = src_val : registers[dst] = src_val;
 }
 
+void cmp(uint8_t comperand) {
+	int result = (int8_t)registers[REG_A] - (int8_t)comperand;
+	if (result > 0) {
+		flags &= ~FLAG_CY;
+		flags &= ~FLAG_Z;
+		flags &= ~FLAG_S;
+	} else if (result == 0) {
+		flags &= ~FLAG_S;
+		flags |= FLAG_Z;
+	} else {
+		flags |= FLAG_S | FLAG_CY;
+		flags &= ~FLAG_Z;
+	}
+}
+
 int main()
 {
 	uint8_t* ip = g_memory + 0x2000;
@@ -271,7 +286,7 @@ int main()
 				PC += 3; break;
 			case SHLD:
 				addr = (g_memory[PC + 1] & 0xFF) | ((g_memory[PC + 2] & 0xFF) << 8);
-				g_memory[addr]	 = registers[REG_L];
+				g_memory[addr]     = registers[REG_L];
 				g_memory[addr + 1] = registers[REG_H];
 				PC += 3; break;
 				break;
@@ -284,10 +299,10 @@ int main()
 				g_memory[addr] = registers[REG_A];
 				PC += 3; break;
 			case XCHG:
-				TMP			  = registers[REG_L];
+				TMP              = registers[REG_L];
 				registers[REG_L] = registers[REG_E];
 				registers[REG_E] = TMP;
-				TMP			  = registers[REG_H];
+				TMP              = registers[REG_H];
 				registers[REG_H] = registers[REG_D];
 				registers[REG_D] = TMP;
 				++PC; break;
@@ -307,7 +322,7 @@ int main()
 				++PC;
 				break;
 			case LXI_SP:
-				SP = (g_memory[PC + 1] & 0xFF) | ((g_memory[PC + 2] & 0xFF) << 8);
+				SP = g_memory[PC + 1] | (g_memory[PC + 2] << 8);
 				PC += 3;
 				break;
 
@@ -612,39 +627,41 @@ int main()
 					__debugbreak();
 				PC++;
 				break;
-
-			case CMP_M: {
-				//A - B
-				uint16_t reg_m = (uint16_t)registers[REG_H] << 8 | registers[REG_L];
-				int result = (int8_t)registers[REG_A] - (int8_t)g_memory[reg_m];
-				if (result > 0) {
-					flags &= ~FLAG_CY;
-					flags &= ~FLAG_Z;
-					flags &= ~FLAG_S;
-				} else if (result == 0) {
-					flags &= ~FLAG_S;
-					flags |= FLAG_Z;
-				} else {
-					flags |= FLAG_S | FLAG_CY;
-					flags &= ~FLAG_Z;
-				}
+			case CMP_A: {
+				flags &= ~FLAG_S;
+				flags |= FLAG_Z;
 				PC++;
 			} break;
-
+			case CMP_B: {
+				cmp(registers[REG_B]);
+				PC++;
+			} break;
+			case CMP_C: {
+				cmp(registers[REG_C]);
+				PC++;
+			} break;
+			case CMP_D: {
+				cmp(registers[REG_D]);
+				PC++;
+			} break;
+			case CMP_E: {
+				cmp(registers[REG_E]);
+				PC++;
+			} break;
+			case CMP_H: {
+				cmp(registers[REG_H]);
+				PC++;
+			} break;
+			case CMP_L: {
+				cmp(registers[REG_L]);
+				PC++;
+			} break;
+			case CMP_M: {
+				cmp(g_memory[HL_PAIR]);
+				PC++;
+			} break;
 			case CPI: {
-				//A - B
-				int result = (int8_t)registers[REG_A] - g_memory[++PC];
-				if (result > 0) {
-					flags &= ~FLAG_CY;
-					flags &= ~FLAG_Z;
-					flags &= ~FLAG_S;
-				} else if (result == 0) {
-					flags &= ~FLAG_S;
-					flags |= FLAG_Z;
-				} else {
-					flags |= FLAG_S | FLAG_CY;
-					flags &= ~FLAG_Z;
-				}
+				cmp(g_memory[++PC]);
 				PC++;
 			} break;
 
@@ -675,6 +692,7 @@ int main()
 				break;
 
 			case NOP:
+                ++PC;
 				break;
 
 			default: panic("Should be unreachable");
