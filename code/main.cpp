@@ -221,7 +221,7 @@ uint8_t update_flag(uint8_t flags, uint16_t previous, uint16_t current, int16_t 
 	//FLAG P
 	int counter = 0;
 	for (int i = 0; i < 8; ++i) {
-		counter += (current & (1 << i) != 0);
+		counter += ((current & (1 << i)) != 0);
 	}
 
 	if (counter & 1)
@@ -717,278 +717,83 @@ int main2()
 			++PC;
 			break;
 
-#if 0
-			//This is doable, might be something that we might do in the future after all the
-			//bugs have been fixed
-#define MOV(A, B) case MOV_##A_##B: \
-			mov(REG_##A, REG_##B); \
-			++PC; \
-			break
+#define MOV(x, y) \
+	case MOV_ ##x## _ ##y : \
+		mov(REG_ ##x, REG_ ##y); \
+		++PC; \
+		break
 
 			MOV(A, A);
 			MOV(A, B);
 			MOV(A, C);
 			MOV(A, D);
 			MOV(A, E);
-			MOV(A, D);
 			MOV(A, H);
 			MOV(A, L);
 			MOV(A, M);
 
+			MOV(B, A);
+			MOV(B, B);
+			MOV(B, C);
+			MOV(B, D);
+			MOV(B, E);
+			MOV(B, H);
+			MOV(B, L);
+			MOV(B, M);
+
+			MOV(C, A);
+			MOV(C, B);
+			MOV(C, C);
+			MOV(C, D);
+			MOV(C, E);
+			MOV(C, H);
+			MOV(C, L);
+			MOV(C, M);
+
+			MOV(D, A);
+			MOV(D, B);
+			MOV(D, C);
+			MOV(D, D);
+			MOV(D, E);
+			MOV(D, H);
+			MOV(D, L);
+			MOV(D, M);
+
+			MOV(E, A);
+			MOV(E, B);
+			MOV(E, C);
+			MOV(E, D);
+			MOV(E, E);
+			MOV(E, H);
+			MOV(E, L);
+			MOV(E, M);
+
+			MOV(H, A);
+			MOV(H, B);
+			MOV(H, C);
+			MOV(H, D);
+			MOV(H, E);
+			MOV(H, H);
+			MOV(H, L);
+			MOV(H, M);
+
+			MOV(L, A);
+			MOV(L, B);
+			MOV(L, C);
+			MOV(L, D);
+			MOV(L, E);
+			MOV(L, H);
+			MOV(L, L);
+			MOV(L, M);
+
+			MOV(M, A);
+			MOV(M, B);
+			MOV(M, C);
+			MOV(M, D);
+			MOV(M, E);
+			MOV(M, H);
+			MOV(M, L);
 #undef MOV
-#endif
-		case MOV_A_A:
-			++PC;
-			break;
-		case MOV_A_B:
-			mov(REG_A, REG_B);
-			++PC;
-			break;
-		case MOV_A_C:
-			mov(REG_A, REG_C);
-			++PC;
-			break;
-		case MOV_A_D:
-			mov(REG_A, REG_D);
-			++PC;
-			break;
-		case MOV_A_E:
-			mov(REG_A, REG_E);
-			++PC;
-			break;
-		case MOV_A_H:
-			mov(REG_A, REG_H);
-			++PC;
-			break;
-		case MOV_A_L:
-			mov(REG_A, REG_L);
-			++PC;
-			break;
-		case MOV_A_M:
-			mov(REG_A, REG_M);
-			++PC;
-			break;
-
-		case MOV_B_A:
-			mov(REG_B, REG_A);
-			++PC;
-			break;
-		case MOV_B_B:
-			++PC;
-			break;
-		case MOV_B_C:
-			mov(REG_B, REG_C);
-			++PC;
-			break;
-		case MOV_B_D:
-			mov(REG_B, REG_D);
-			++PC;
-			break;
-		case MOV_B_E:
-			mov(REG_B, REG_E);
-			++PC;
-			break;
-		case MOV_B_H:
-			mov(REG_B, REG_H);
-			++PC;
-			break;
-		case MOV_B_L:
-			mov(REG_B, REG_L);
-			++PC;
-			break;
-		case MOV_B_M:
-			mov(REG_B, REG_M);
-			++PC;
-			break;
-
-		case MOV_C_A:
-			mov(REG_C, REG_A);
-			++PC;
-			break;
-		case MOV_C_B:
-			mov(REG_C, REG_B);
-			++PC;
-			break;
-		case MOV_C_C:
-			++PC;
-			break;
-		case MOV_C_D:
-			mov(REG_C, REG_D);
-			++PC;
-			break;
-		case MOV_C_E:
-			mov(REG_C, REG_E);
-			++PC;
-			break;
-		case MOV_C_H:
-			mov(REG_C, REG_H);
-			++PC;
-			break;
-		case MOV_C_L:
-			mov(REG_C, REG_L);
-			++PC;
-			break;
-		case MOV_C_M:
-			mov(REG_C, REG_M);
-			++PC;
-			break;
-
-		case MOV_D_A:
-			mov(REG_D, REG_A);
-			++PC;
-			break;
-		case MOV_D_B:
-			mov(REG_D, REG_B);
-			++PC;
-			break;
-		case MOV_D_C:
-			mov(REG_D, REG_C);
-			++PC;
-			break;
-		case MOV_D_D:
-			++PC;
-			break;
-		case MOV_D_E:
-			mov(REG_D, REG_E);
-			++PC;
-			break;
-		case MOV_D_H:
-			mov(REG_D, REG_H);
-			++PC;
-			break;
-		case MOV_D_L:
-			mov(REG_D, REG_L);
-			++PC;
-			break;
-		case MOV_D_M:
-			mov(REG_D, REG_M);
-			++PC;
-			break;
-
-		case MOV_E_A:
-			mov(REG_E, REG_A);
-			++PC;
-			break;
-		case MOV_E_B:
-			mov(REG_E, REG_B);
-			++PC;
-			break;
-		case MOV_E_C:
-			mov(REG_E, REG_C);
-			++PC;
-			break;
-		case MOV_E_D:
-			mov(REG_E, REG_D);
-			++PC;
-			break;
-		case MOV_E_E:
-			++PC;
-			break;
-		case MOV_E_H:
-			mov(REG_E, REG_H);
-			++PC;
-			break;
-		case MOV_E_L:
-			mov(REG_E, REG_L);
-			++PC;
-			break;
-		case MOV_E_M:
-			mov(REG_E, REG_M);
-			++PC;
-			break;
-
-		case MOV_H_A:
-			mov(REG_H, REG_A);
-			++PC;
-			break;
-		case MOV_H_B:
-			mov(REG_H, REG_B);
-			++PC;
-			break;
-		case MOV_H_C:
-			mov(REG_H, REG_C);
-			++PC;
-			break;
-		case MOV_H_D:
-			mov(REG_H, REG_D);
-			++PC;
-			break;
-		case MOV_H_E:
-			mov(REG_H, REG_E);
-			++PC;
-			break;
-		case MOV_H_H:
-			++PC;
-			break;
-		case MOV_H_L:
-			mov(REG_H, REG_L);
-			++PC;
-			break;
-		case MOV_H_M:
-			mov(REG_H, REG_M);
-			++PC;
-			break;
-
-		case MOV_L_A:
-			mov(REG_L, REG_A);
-			++PC;
-			break;
-		case MOV_L_B:
-			mov(REG_L, REG_B);
-			++PC;
-			break;
-		case MOV_L_C:
-			mov(REG_L, REG_C);
-			++PC;
-			break;
-		case MOV_L_D:
-			mov(REG_L, REG_D);
-			++PC;
-			break;
-		case MOV_L_E:
-			mov(REG_L, REG_E);
-			++PC;
-			break;
-		case MOV_L_H:
-			mov(REG_L, REG_H);
-			++PC;
-			break;
-		case MOV_L_L:
-			++PC;
-			break;
-		case MOV_L_M:
-			mov(REG_L, REG_M);
-			++PC;
-			break;
-
-		case MOV_M_A:
-			mov(REG_M, REG_A);
-			++PC;
-			break;
-		case MOV_M_B:
-			mov(REG_M, REG_B);
-			++PC;
-			break;
-		case MOV_M_C:
-			mov(REG_M, REG_C);
-			++PC;
-			break;
-		case MOV_M_D:
-			mov(REG_M, REG_D);
-			++PC;
-			break;
-		case MOV_M_E:
-			mov(REG_M, REG_E);
-			++PC;
-			break;
-		case MOV_M_H:
-			mov(REG_M, REG_H);
-			++PC;
-			break;
-		case MOV_M_L:
-			mov(REG_M, REG_L);
-			++PC;
-			break;
 
 		case DCR_C: {
 			registers[REG_F] = update_flag(registers[REG_F], registers[REG_C], (uint16_t)registers[REG_C] - 1, -1);
